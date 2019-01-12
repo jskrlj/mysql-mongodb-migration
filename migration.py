@@ -110,6 +110,33 @@ def insert_bets(cursor, mongo_client, league_map, match_map):
     mongo_client.bets.insert_many(bets_to_insert)
 
 
+def insert_options(cursor, mongo_client):
+    # holding records to insert
+    options_to_insert = []
+    # Fetch records for matches
+    cursor.execute("SELECT options1, options2, options3 FROM all_beters.vaja group by options1, options2, options3")
+    records = cursor.fetchall()
+
+    for opt in records:
+        options_to_insert.append({
+            "Option1": opt[0],
+            "Option2": opt[1],
+            "Option3": opt[2],
+        })
+
+    mongo_client.bet_options.insert_many(options_to_insert)
+
+
+def get_option_map(mongo_client):
+    # holding option map
+    option_map_id ={}
+    # get all options
+    for doc in mongo_client.bet_options.find():
+        optKey = doc["Option1"] + doc["Option2"]+ doc["Option3"]
+        option_map_id[optKey] = doc["_id"]
+    return option_map_id
+
+
 def migrate(cursor,mongo_client):
 
     #  insert_leagues(cursor, mongo_client)
