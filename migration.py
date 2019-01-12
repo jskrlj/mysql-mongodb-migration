@@ -88,8 +88,6 @@ def insert_bets(cursor, mongo_client, league_map, match_map, options_map, bet_ty
     cursor.execute("SELECT * FROM vaja");
     records = cursor.fetchall();
 
-    league_map = get_leagues_map(mongo_client)
-
     # build bet record
     for bet in records:
         match_id = match_map[get_match_key_unique(league_map, bet)]  # get match id from mongo
@@ -219,8 +217,6 @@ def migrate(cursor,mongo_client):
 
     # Insert bets percentages
     insert_bet_percentage(cursor, mongo_client, leagues_map, match_map, bet_type_map)
-
-
 
 
 if __name__ == '__main__':
