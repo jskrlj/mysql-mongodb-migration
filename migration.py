@@ -81,11 +81,11 @@ def insert_mathes(cursor, mongo_client, league_map):
     mongo_client.matches.insert_many(match_list)
 
 
-def insert_bets(cursor, mongo_client, league_map, match_map):
+def insert_bets(cursor, mongo_client, league_map, match_map, options_map, bet_type_map):
     # holding bets
     bets_to_insert = []
     # Fetch records for matches
-    cursor.execute("SELECT * FROM vaja limit 100");
+    cursor.execute("SELECT * FROM vaja");
     records = cursor.fetchall();
 
     league_map = get_leagues_map(mongo_client)
@@ -93,20 +93,18 @@ def insert_bets(cursor, mongo_client, league_map, match_map):
     # build bet record
     for bet in records:
         match_id = match_map[get_match_key_unique(league_map, bet)]  # get match id from mongo
+        options_id = options_map[get_option_key(bet)]
+        bet_type_id = bet_type_map[get_bet_type_key(bet)]
         bets_to_insert.append({
-            "Match": match_id,
             "BetterId": bet[1],
-            "Type1Id": bet[3],
-            "Type2": bet[4],
-            "Type3": bet[5],
+            "Match": match_id,
+            "Options": options_id,
+            "BetType": bet_type_id,
             "PickedQuota": float(bet[16]),
             "PickedOption": bet[17],
             "Status": bet[19],
         })
-    print(bets_to_insert)
 
-    # TODO link with bet percent
-    # TODO link with options
     mongo_client.bets.insert_many(bets_to_insert)
 
 
@@ -127,25 +125,102 @@ def insert_options(cursor, mongo_client):
     mongo_client.bet_options.insert_many(options_to_insert)
 
 
+def insert_bet_percentage(cursor, mongo_client, league_map, match_map, bet_type_map):
+    # holding records to insert
+    percentages_to_insert = []
+    unique_perc_records = collections.defaultdict(int)
+    # Fetch records for matches
+    cursor.execute("SELECT * FROM all_beters.vaja")
+    records = cursor.fetchall()
+
+    for row in records:
+        match_id = match_map[get_match_key_unique(league_map, row)]  # get match id from mongo
+        bet_type_id = bet_type_map[get_bet_type_key(row)]
+        unique_percentage_key = str(match_id) + str(bet_type_id)
+        unique_perc_records[unique_percentage_key] += 1
+        # insert only one record for one percentage
+        if unique_perc_records[unique_percentage_key] == 1:
+            percentages_to_insert.append({
+                "MatchId": match_id,
+                "BetTypeId": bet_type_id,
+                "Percentage1": row[10],
+                "Percentage2": row[11],
+                "Percentage3": row[12],
+            })
+
+    mongo_client.bet_percents.insert_many(percentages_to_insert)
+
+
+def insert_bet_types(cursor, mongo_client):
+    # holding records to insert
+    types_to_insert = []
+    # Fetch records for types
+    cursor.execute("SELECT type1_id, type2, type3 FROM all_beters.vaja group by type1_id, type2, type3")
+    records = cursor.fetchall()
+
+    for type_bet in records:
+        types_to_insert.append({
+            "Type1": type_bet[0],
+            "Type2": type_bet[1],
+            "Type3": type_bet[2],
+        })
+
+    mongo_client.bet_types.insert_many(types_to_insert)
+
+
+def get_option_key(bet_row):
+    return bet_row[13]+bet_row[14]+bet_row[15]
+
+
+def get_bet_type_key(bet_row):
+    return str(bet_row[3])+bet_row[4]+bet_row[5]
+
+
 def get_option_map(mongo_client):
     # holding option map
-    option_map_id ={}
+    option_map_id = {}
     # get all options
     for doc in mongo_client.bet_options.find():
-        optKey = doc["Option1"] + doc["Option2"]+ doc["Option3"]
-        option_map_id[optKey] = doc["_id"]
+        opt_key = doc["Option1"] + doc["Option2"]+ doc["Option3"]
+        option_map_id[opt_key] = doc["_id"]
+    return option_map_id
+
+
+def get_type_map(mongo_client):
+    # holding option map
+    option_map_id = {}
+    # get all options
+    for doc in mongo_client.bet_types.find():
+        type_key = str(doc["Type1"]) + doc["Type2"] + doc["Type3"]
+        option_map_id[type_key] = doc["_id"]
     return option_map_id
 
 
 def migrate(cursor,mongo_client):
 
-    #  insert_leagues(cursor, mongo_client)
-    leagues_map = get_leagues_map(mongo_client)
-    #  print(leagues_map)
-    #  insert_mathes(cursor, mongo_client, leagues_map)
-    match_map = get_match_map(mongo_client)
-    #  print(match_map)
-    insert_bets(cursor, mongo_client, leagues_map, match_map)
+    # Insert leagues
+    insert_leagues(cursor, mongo_client)
+    leagues_map = get_leagues_map(mongo_client)  # map with populated ids
+
+    # Insert matches
+    insert_mathes(cursor, mongo_client, leagues_map)
+    match_map = get_match_map(mongo_client)  # map with populated ids
+
+    # Insert bet options
+    insert_options(cursor, mongo_client)
+    options_map = get_option_map(mongo_client)  # map with populated ids
+
+    # Insert bet types
+    insert_bet_types(cursor,mongo_client)
+    bet_type_map = get_type_map(mongo_client)  # map with populated ids
+
+    # Insert bets
+    insert_bets(cursor, mongo_client, leagues_map, match_map, options_map,bet_type_map)
+
+    # Insert bets percentages
+    insert_bet_percentage(cursor, mongo_client, leagues_map, match_map, bet_type_map)
+
+
 
 
 if __name__ == '__main__':
