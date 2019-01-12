@@ -3,18 +3,20 @@
 import pyodbc
 import pymongo
 import collections
-
+from bokeh.io import show, output_file
+from bokeh.plotting import figure
 
 def connect():
     # Specifying the ODBC driver, server name, database, etc. directly
-    cnxn = pyodbc.connect('DRIVER={MySQL ODBC 5.3 UNICODE Driver};SERVER=localhost;DATABASE=all_beters;uid=root')
+    driver = 'MySQL'
+    cnxn = pyodbc.connect('DRIVER={' + driver + '};SERVER=127.0.0.1;DATABASE=all_beters;uid=root; pwd=password')
     # Create a cursor from the connection
     return cnxn.cursor()
 
 
 def connect_mongo():
-    my_client = pymongo.MongoClient("mongodb://localhost:27017/")
-    db = my_client["admin"]
+    my_client = pymongo.MongoClient("mongodb://127.0.0.1:27017/")
+    db = my_client["stave"]
     return db
 
 
@@ -87,6 +89,8 @@ def insert_bets(cursor, mongo_client, league_map, match_map, options_map, bet_ty
     # Fetch records for matches
     cursor.execute("SELECT * FROM vaja");
     records = cursor.fetchall();
+
+    league_map = get_leagues_map(mongo_client)
 
     # build bet record
     for bet in records:
@@ -219,12 +223,53 @@ def migrate(cursor,mongo_client):
     insert_bet_percentage(cursor, mongo_client, leagues_map, match_map, bet_type_map)
 
 
+def get_number_of_bets_corelated_to_sport_id_dict():
+    query = [{'$lookup':{'from':'matches','localField':'Match','foreignField':'_id','as':'match'}},
+             {'$lookup':{'from':'leagues','localField':'match.Liga','foreignField':'_id','as':'Liga'}}]
+    joined_bet_match_league = mongo_client.bets.aggregate(query)
+    dict_sport_bets = {}
+    for i in joined_bet_match_league:
+        if not i['Liga'][0]['Sport'] in dict_sport_bets:
+            dict_sport_bets[i['Liga'][0]['Sport']] = 1
+        else:
+            dict_sport_bets[i['Liga'][0]['Sport']] = dict_sport_bets[i['Liga'][0]['Sport']] + 1
+    return dict_sport_bets
+
+
+def visualize_sports_bets():
+    b_dict = get_number_of_bets_corelated_to_sport_id_dict()
+    output_file("bets_sports.html")
+    sports = {21:'Rokomet',
+              28:'Plavanje',
+              11:'Košarka',
+              15:'Šah',
+              8:'Floorball',
+              29:'Tek',
+              27:'Nogomet',
+              10:'Mikado',
+              20:'Tornado',
+              25:'Cokolado',
+              24:'Pikado',
+              30:'Curling',
+              6:'Biljard'}
+
+    p = figure(x_range=list(sports.values()), plot_height=350, title="Število stav na posamezen šport",
+               toolbar_location=None, tools="")
+
+    p.vbar(x=list(sports.values()), top=list(b_dict.values()), width=0.9)
+
+    p.xgrid.grid_line_color = None
+    p.y_range.start = 0
+
+    show(p)
+
+
+
 if __name__ == '__main__':
 
-    cursor = connect()
+    #cursor = connect()
     mongo_client = connect_mongo()
-
-    migrate(cursor, mongo_client)
+    visualize_sports_bets()
 
 
 
