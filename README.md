@@ -1,4 +1,4 @@
-# mongo-bets-migration
+# mysql-mongodb-migration
 MySQL to mongoDB normalization and data migration
 
 
