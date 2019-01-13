@@ -5,6 +5,7 @@ import pymongo
 import collections
 from bokeh.io import show, output_file
 from bokeh.plotting import figure
+from datetime import datetime
 
 def connect():
     # Specifying the ODBC driver, server name, database, etc. directly
@@ -255,11 +256,47 @@ def visualize_sports_bets():
 
     p = figure(x_range=list(sports.values()), plot_height=350, title="Število stav na posamezen šport",
                toolbar_location=None, tools="")
-
     p.vbar(x=list(sports.values()), top=list(b_dict.values()), width=0.9)
-
     p.xgrid.grid_line_color = None
     p.y_range.start = 0
+    show(p)
+
+
+def get_days_profit_dict():
+    query = [{'$lookup':{'from':'matches','localField':'Match','foreignField':'_id','as':'match'}},
+             {'$lookup':{'from':'leagues','localField':'match.Liga','foreignField':'_id','as':'Liga'}}]
+    joined_bet_match_league = mongo_client.bets.aggregate(query)
+    dict_day_profit = {}
+    single_bet_investment = 1
+    for row in joined_bet_match_league:
+        status = row["Status"]
+        quota  = row["PickedQuota"]
+        bet_date = str(row['match'][0]['Date'])
+        datetime_object = datetime.strptime(bet_date, '%Y-%m-%d %H:%M:%S')
+        key_date = '{:%m-%d-%Y}'.format(datetime_object)
+        if datetime_object.year ==  datetime.strptime('2018', '%Y').year:
+            continue
+        if key_date not in dict_day_profit:
+            dict_day_profit[key_date] = quota*single_bet_investment if status == "W" else -single_bet_investment
+        else:
+            dict_day_profit[key_date] = dict_day_profit[key_date] + quota*single_bet_investment if status == "W" else dict_day_profit[key_date] - single_bet_investment
+    #for k,v in dict_day_profit.items():
+    #    print(k + " : " + str(v))
+    return dict_day_profit
+
+def visualize_day_profit():
+    p_dict = get_days_profit_dict()
+    output_file("days_profits.html")
+    date_time_days = [datetime.strptime(k, '%m-%d-%Y') for k in p_dict.keys()]
+
+
+    p = figure(x_axis_type='datetime', plot_height=350, title="Dobiček na posamezen dan",
+               toolbar_location=None, tools="")
+    #p.line(date_time_days, list(p_dict.values()))
+
+    p.vbar(x=date_time_days, top=list(p_dict.values()), width=0.9)
+    p.xgrid.grid_line_color = None
+    p.y_range.start = -100
 
     show(p)
 
@@ -269,9 +306,7 @@ if __name__ == '__main__':
 
     #cursor = connect()
     mongo_client = connect_mongo()
-    visualize_sports_bets()
-
-
+    visualize_day_profit()
 
 
 
